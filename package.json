@@ -1,13 +1,15 @@
 {
-  "name": "mailstock-market",
+  "name": "globalemailhub",
   "version": "1.0.0",
-  "description": "MailStock Market - Digital marketplace for temporary and aged email accounts",
+  "description": "GlobalEmail Hub - Digital marketplace for temporary and aged email accounts",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "cd backend && npm run dev",
     "client": "cd frontend && npm start",
     "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
-    "seed": "cd backend && node seed.js"
+    "seed": "cd backend && node seed.js",
+    "build": "cd frontend && npm install && npm run build",
+    "start": "cd backend && node server.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.0"
