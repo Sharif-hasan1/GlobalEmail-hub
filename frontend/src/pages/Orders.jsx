@@ -1,0 +1,191 @@
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import './Orders.css';
+
+const STATUS_BADGE = {
+  pending: 'badge-yellow',
+  processing: 'badge-blue',
+  completed: 'badge-green',
+  cancelled: 'badge-red'
+};
+
+export default function Orders() {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState(null);
+  const [emails, setEmails] = useState({}); // { orderId: [...emails] }
+  const [emailLoading, setEmailLoading] = useState({});
+  const [copiedId, setCopiedId] = useState('');
+
+  useEffect(() => {
+    if (!authLoading && !user) { navigate('/login?redirect=/orders'); return; }
+    if (user) {
+      axios.get('/api/orders/my')
+        .then(res => setOrders(res.data))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
+  }, [user, authLoading, navigate]);
+
+  const loadEmails = async (orderId) => {
+    if (emails[orderId]) return;
+    setEmailLoading(prev => ({ ...prev, [orderId]: true }));
+    try {
+      const res = await axios.get(`/api/orders/${orderId}/emails`);
+      setEmails(prev => ({ ...prev, [orderId]: res.data }));
+    } catch {}
+    setEmailLoading(prev => ({ ...prev, [orderId]: false }));
+  };
+
+  const handleExpand = (orderId, order) => {
+    const newId = expandedId === orderId ? null : orderId;
+    setExpandedId(newId);
+    if (newId && order.status === 'completed' && order.emailsDelivered > 0) {
+      loadEmails(orderId);
+    }
+  };
+
+  const copyEmails = (orderId) => {
+    const list = emails[orderId];
+    if (!list) return;
+    const text = list.map(e => `${e.email}\t${e.password}\t${e.recovery || ''}`).join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedId(orderId);
+    setTimeout(() => setCopiedId(''), 2000);
+  };
+
+  if (authLoading || loading) {
+    return <div className="page-loading"><div className="spinner" /></div>;
+  }
+
+  return (
+    <div className="orders-page">
+      <div className="container">
+        <div className="page-header">
+          <h1>My Orders</h1>
+          <p>View and track all your purchases</p>
+        </div>
+
+        {orders.length === 0 ? (
+          <div className="empty-state card" style={{ padding: 60 }}>
+            <div className="empty-state-icon">📦</div>
+            <h3>No orders yet</h3>
+            <p>Start shopping to see your orders here.</p>
+            <Link to="/products" className="btn btn-primary btn-rounded" style={{ marginTop: 16 }}>
+              Browse Products →
+            </Link>
+          </div>
+        ) : (
+          <div className="orders-list">
+            {orders.map(order => (
+              <div key={order._id} className="order-card card">
+                <div className="order-header" onClick={() => handleExpand(order._id, order)}>
+                  <div className="order-id">
+                    <span className="order-hash">#</span>
+                    <span>{order._id.slice(-8).toUpperCase()}</span>
+                  </div>
+                  <div className="order-info">
+                    <span className="order-date">{new Date(order.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                    <span className={`badge ${STATUS_BADGE[order.status] || 'badge-gray'}`}>{order.status}</span>
+                  </div>
+                  <div className="order-total">
+                    <strong>${order.total.toFixed(2)}</strong>
+                    <span>{order.items.length} item{order.items.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <button className={`order-expand-btn${expandedId === order._id ? ' open' : ''}`} aria-label="Toggle details">
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+
+                {expandedId === order._id && (
+                  <div className="order-body">
+                    <table className="order-items-table">
+                      <thead>
+                        <tr>
+                          <th>Product</th>
+                          <th>Qty</th>
+                          <th>Price</th>
+                          <th>Subtotal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.items.map((item, i) => (
+                          <tr key={i}>
+                            <td className="item-title">{item.title}</td>
+                            <td className="item-center">{item.quantity}</td>
+                            <td className="item-center">${item.price.toFixed(3)}</td>
+                            <td className="item-center item-subtotal">${(item.price * item.quantity).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan={3} className="order-total-label">Total</td>
+                          <td className="order-total-value">${order.total.toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+
+                    {/* Delivered Emails Section */}
+                    {order.status === 'completed' && order.emailsDelivered > 0 && (
+                      <div className="delivered-emails-section">
+                        <div className="delivered-emails-header">
+                          <h4>📧 Your Email Credentials</h4>
+                          {emails[order._id]?.length > 0 && (
+                            <button className="btn btn-secondary btn-sm" onClick={() => copyEmails(order._id)}>
+                              {copiedId === order._id ? '✅ Copied!' : '📋 Copy All'}
+                            </button>
+                          )}
+                        </div>
+                        {emailLoading[order._id] ? (
+                          <div className="del-emails-loading"><div className="spinner spinner-sm" /> Loading...</div>
+                        ) : emails[order._id]?.length > 0 ? (
+                          <div className="del-emails-table-wrap">
+                            <table className="del-emails-table">
+                              <thead>
+                                <tr><th>#</th><th>Email</th><th>Password</th><th>Recovery</th></tr>
+                              </thead>
+                              <tbody>
+                                {emails[order._id].map((e, i) => (
+                                  <tr key={e._id}>
+                                    <td>{i + 1}</td>
+                                    <td className="del-email-cell">{e.email}</td>
+                                    <td className="del-pw-cell">{e.password}</td>
+                                    <td>{e.recovery || '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="del-emails-empty">Loading email data...</p>
+                        )}
+                      </div>
+                    )}
+
+                    {order.status === 'pending' && (
+                      <div className="order-pending-note">
+                        ⏳ Your payment is being verified. You'll receive your emails once confirmed.
+                      </div>
+                    )}
+                    {order.status === 'processing' && (
+                      <div className="order-processing-note">
+                        🔄 Your order is being processed. Emails will be delivered shortly.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

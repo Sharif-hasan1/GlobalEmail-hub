@@ -1,0 +1,255 @@
+.orders-page { padding-bottom: 64px; }
+
+.orders-list { display: flex; flex-direction: column; gap: 12px; }
+
+.order-card { overflow: hidden; }
+
+.order-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.order-header:hover { background: var(--bg); }
+
+.order-id {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 110px;
+}
+
+.order-hash { color: var(--text-light); }
+
+.order-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.order-date {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.order-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 80px;
+}
+
+.order-total strong {
+  font-size: 16px;
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.order-total span {
+  font-size: 11px;
+  color: var(--text-light);
+}
+
+.order-expand-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  transition: transform var(--transition), color var(--transition);
+  flex-shrink: 0;
+}
+
+.order-expand-btn.open { transform: rotate(180deg); color: var(--primary); }
+
+/* Order body */
+.order-body {
+  border-top: 1px solid var(--border);
+  padding: 0;
+  background: #fafbfc;
+  animation: slideDown 0.2s ease;
+}
+
+.order-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.order-items-table thead tr th {
+  padding: 10px 20px;
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  background: #f3f4f6;
+}
+
+.order-items-table th:not(:first-child),
+.order-items-table td:not(:first-child) { text-align: center; }
+
+.order-items-table tbody tr td {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.order-items-table tbody tr:last-child td { border-bottom: none; }
+.order-items-table tbody tr:hover td { background: #f0f4ff; }
+
+.item-title { font-weight: 600; }
+.item-center { color: var(--text-secondary); }
+.item-subtotal { font-weight: 700 !important; color: var(--text-primary) !important; }
+
+.order-items-table tfoot td {
+  padding: 12px 20px;
+  border-top: 2px solid var(--border);
+  font-weight: 700;
+  background: #f8f9fc;
+}
+
+.order-total-label {
+  text-align: right !important;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.order-total-value {
+  text-align: center !important;
+  font-size: 16px;
+  color: var(--primary);
+}
+
+@media (max-width: 600px) {
+  .order-header { gap: 10px; padding: 14px 16px; }
+  .order-id { min-width: unset; font-size: 12px; }
+  .order-items-table thead { display: none; }
+  .order-items-table tbody tr { display: flex; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .order-items-table tbody tr td { border: none; padding: 2px 4px; }
+}
+
+/* ─── Delivered Emails Section ──────────────────────── */
+.delivered-emails-section {
+  border-top: 2px solid var(--primary);
+  background: linear-gradient(135deg, #f0f7ff 0%, #fafbff 100%);
+  padding: 20px;
+}
+
+.delivered-emails-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.delivered-emails-header h4 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.del-emails-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.del-emails-table-wrap {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.del-emails-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.del-emails-table thead tr th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  background: #f3f4f6;
+}
+
+.del-emails-table tbody tr td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.del-emails-table tbody tr:last-child td { border-bottom: none; }
+.del-emails-table tbody tr:hover td { background: #f0f4ff; }
+
+.del-email-cell {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.del-pw-cell {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.del-emails-empty {
+  text-align: center;
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.order-pending-note,
+.order-processing-note {
+  padding: 14px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  border-top: 1px solid var(--border);
+}
+
+.order-pending-note {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.order-processing-note {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+@media (max-width: 600px) {
+  .delivered-emails-section { padding: 14px; }
+  .del-emails-table thead { display: none; }
+  .del-emails-table tbody tr {
+    display: flex; flex-wrap: wrap; padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .del-emails-table tbody tr td { border: none; padding: 2px 4px; font-size: 12px; }
+}

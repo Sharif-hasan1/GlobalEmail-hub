@@ -1,0 +1,153 @@
+.support-page { padding-bottom: 64px; }
+
+.support-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+/* FAQ */
+.faq-section { padding: 28px 28px 24px; }
+.faq-section h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+
+.faq-list { display: flex; flex-direction: column; }
+
+.faq-item {
+  border-bottom: 1px solid var(--border);
+}
+
+.faq-item:last-child { border-bottom: none; }
+
+.faq-question {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 0;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.faq-question:hover { color: var(--primary); }
+
+.faq-icon {
+  flex-shrink: 0;
+  transition: transform var(--transition);
+  color: var(--text-secondary);
+}
+
+.faq-item.open .faq-icon { transform: rotate(180deg); }
+.faq-item.open .faq-question { color: var(--primary); }
+
+.faq-answer {
+  padding: 0 0 14px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  animation: slideDown 0.18s ease;
+}
+
+/* Telegram card */
+.telegram-card {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #29a8eb 0%, #1a8fc7 100%);
+  border: none;
+}
+
+.telegram-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.telegram-icon-wrap {
+  width: 52px;
+  height: 52px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.telegram-card-text {
+  flex: 1;
+}
+
+.telegram-card-text h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 3px;
+}
+
+.telegram-card-text p {
+  font-size: 13px;
+  color: rgba(255,255,255,0.85);
+}
+
+.telegram-card .btn-primary {
+  background: #fff;
+  color: #1a8fc7;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.telegram-card .btn-primary:hover {
+  background: #f0f9ff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Contact */
+.contact-section { display: flex; flex-direction: column; gap: 16px; }
+
+/* Contact info card */
+.contact-info-card { padding: 22px 24px; }
+.contact-info-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+.contact-info-list { display: flex; flex-direction: column; gap: 0; }
+.contact-info-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border-radius: 10px;
+  text-decoration: none; color: inherit;
+  transition: background 0.15s;
+}
+.contact-info-item:hover { background: var(--bg-secondary, #f3f4f6); }
+.contact-info-icon { font-size: 22px; width: 28px; text-align: center; flex-shrink: 0; }
+.contact-info-item div { display: flex; flex-direction: column; gap: 1px; }
+.contact-info-item strong { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary, #6b7280); }
+.contact-info-item span { font-size: 14px; font-weight: 500; color: var(--text-primary, #111827); }
+
+.contact-card { padding: 28px; }
+.contact-card h2 { font-size: 18px; font-weight: 700; }
+.contact-sub { font-size: 13.5px; color: var(--text-secondary); margin-top: 4px; }
+
+/* Quick links */
+.quick-links-card { padding: 20px 24px; }
+.quick-links-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.quick-links { display: flex; flex-direction: column; gap: 4px; }
+
+.quick-link {
+  display: block;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background var(--transition), color var(--transition);
+}
+.quick-link:hover { background: var(--primary-light); color: var(--primary); text-decoration: none; }
+
+@media (max-width: 768px) {
+  .support-grid { grid-template-columns: 1fr; }
+}
