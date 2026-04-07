@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const connectDB = require('./config/db');
 
 const app = express();
@@ -41,12 +42,26 @@ app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
 
 // Serve React frontend in production
-const buildPath = path.join(__dirname, '../frontend/build');
-if (require('fs').existsSync(buildPath)) {
+const buildPath = path.resolve(__dirname, '..', 'frontend', 'build');
+console.log('Build path:', buildPath);
+console.log('Build exists:', fs.existsSync(buildPath));
+if (fs.existsSync(buildPath)) {
+  console.log('Build contents:', fs.readdirSync(buildPath));
   app.use(express.static(buildPath));
   app.get('*', (req, res) => {
     res.sendFile(path.join(buildPath, 'index.html'));
   });
+} else {
+  console.log('WARNING: frontend/build not found! CWD:', process.cwd(), '__dirname:', __dirname);
+  // List project structure for debugging
+  try {
+    const parentDir = path.resolve(__dirname, '..');
+    console.log('Parent dir contents:', fs.readdirSync(parentDir));
+    const frontendDir = path.resolve(__dirname, '..', 'frontend');
+    if (fs.existsSync(frontendDir)) {
+      console.log('Frontend dir contents:', fs.readdirSync(frontendDir));
+    }
+  } catch (e) { console.log('Debug error:', e.message); }
 }
 
 const PORT = process.env.PORT || 5000;
