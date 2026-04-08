@@ -16,10 +16,14 @@ const ActivityLog = require('../models/ActivityLog');
 const Coupon = require('../models/Coupon');
 const Settings = require('../models/Settings');
 const DeliveredEmail = require('../models/DeliveredEmail');
+const OrderFile = require('../models/OrderFile');
 
 // ─── File uploads setup ────────────────────────────────
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const orderFilesDir = path.join(uploadsDir, 'orders');
+if (!fs.existsSync(orderFilesDir)) fs.mkdirSync(orderFilesDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: uploadsDir,
@@ -56,6 +60,25 @@ const excelUpload = multer({
     const allowed = /xlsx|xls|csv/;
     if (allowed.test(path.extname(file.originalname).toLowerCase())) cb(null, true);
     else cb(new Error('Only Excel/CSV files (.xlsx, .xls, .csv) are allowed'));
+  }
+});
+
+const orderFileStorage = multer.diskStorage({
+  destination: orderFilesDir,
+  filename: (req, file, cb) => {
+    const orderId = req.params.id ? req.params.id.slice(-6).toUpperCase() : 'UNKNOWN';
+    const safeName = `order_${orderId}_${Date.now()}${path.extname(file.originalname).toLowerCase()}`;
+    cb(null, safeName);
+  }
+});
+
+const orderFileUpload = multer({
+  storage: orderFileStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = /xlsx|xls|csv|txt/;
+    if (allowed.test(path.extname(file.originalname).toLowerCase())) cb(null, true);
+    else cb(new Error('Only .xlsx, .xls, .csv, .txt files are allowed'));
   }
 });
 
@@ -481,6 +504,73 @@ router.get('/orders/:id/emails', auth, adminCheck, async (req, res) => {
   try {
     const emails = await DeliveredEmail.find({ order: req.params.id }).sort({ createdAt: 1 });
     res.json(emails);
+  } catch (err) { res.status(500).json({ msg: 'Server error' }); }
+});
+
+// ═══════════════════════════════════════════════════════
+//  ORDER FILE DELIVERY SYSTEM
+// ═══════════════════════════════════════════════════════
+
+// Upload file for an order (admin)
+router.post('/orders/:id/upload-file', auth, requireRole('admin'), orderFileUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ msg: 'No file uploaded' });
+
+    const order = await Order.findById(req.params.id).populate('user', 'username email');
+    if (!order) {
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ msg: 'Order not found' });
+    }
+
+    const orderFile = await OrderFile.create({
+      order: order._id,
+      originalName: req.file.originalname,
+      storedName: req.file.filename,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      uploadedBy: req.user.id
+    });
+
+    // Mark order as completed
+    order.status = 'completed';
+    await order.save();
+
+    await logActivity(req, `Uploaded file "${req.file.originalname}" for order #${order._id.toString().slice(-8)} — marked completed`, 'order', order._id.toString());
+
+    res.json({
+      file: orderFile,
+      orderId: order._id,
+      status: 'completed',
+      msg: 'File uploaded and order marked as completed'
+    });
+  } catch (err) {
+    console.error(err);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ msg: 'File upload failed' });
+  }
+});
+
+// List files for an order (admin)
+router.get('/orders/:id/files', auth, adminCheck, async (req, res) => {
+  try {
+    const files = await OrderFile.find({ order: req.params.id }).sort({ createdAt: -1 });
+    res.json(files);
+  } catch (err) { res.status(500).json({ msg: 'Server error' }); }
+});
+
+// Delete a file (admin)
+router.delete('/orders/files/:fileId', auth, requireRole('admin'), async (req, res) => {
+  try {
+    const orderFile = await OrderFile.findById(req.params.fileId);
+    if (!orderFile) return res.status(404).json({ msg: 'File not found' });
+
+    const filePath = path.join(orderFilesDir, orderFile.storedName);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    await OrderFile.findByIdAndDelete(req.params.fileId);
+    await logActivity(req, `Deleted file "${orderFile.originalName}" from order #${orderFile.order.toString().slice(-8)}`, 'order', orderFile.order.toString());
+
+    res.json({ msg: 'File deleted' });
   } catch (err) { res.status(500).json({ msg: 'Server error' }); }
 });
 

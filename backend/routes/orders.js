@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
 const auth = require('../middleware/auth');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const DeliveredEmail = require('../models/DeliveredEmail');
+const OrderFile = require('../models/OrderFile');
 
 // @route POST /api/orders
 router.post('/', auth, async (req, res) => {
@@ -91,6 +94,42 @@ router.get('/:id/emails', auth, async (req, res) => {
     if (!order) return res.status(404).json({ msg: 'Order not found' });
     const emails = await DeliveredEmail.find({ order: order._id }).select('email password recovery').sort({ createdAt: 1 });
     res.json(emails);
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// @route GET /api/orders/:id/files — user lists files for their order
+router.get('/:id/files', auth, async (req, res) => {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, user: req.user.id });
+    if (!order) return res.status(404).json({ msg: 'Order not found' });
+    const files = await OrderFile.find({ order: order._id }).select('originalName fileSize createdAt downloads').sort({ createdAt: -1 });
+    res.json(files);
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// @route GET /api/orders/:id/files/:fileId/download — user downloads a file
+router.get('/:id/files/:fileId/download', auth, async (req, res) => {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, user: req.user.id });
+    if (!order) return res.status(404).json({ msg: 'Order not found' });
+
+    const orderFile = await OrderFile.findOne({ _id: req.params.fileId, order: order._id });
+    if (!orderFile) return res.status(404).json({ msg: 'File not found' });
+
+    const filePath = path.join(__dirname, '..', 'uploads', 'orders', orderFile.storedName);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ msg: 'File no longer available on server' });
+
+    // Update download stats
+    orderFile.downloads += 1;
+    orderFile.lastDownloadAt = new Date();
+    await orderFile.save();
+
+    res.setHeader('Content-Disposition', `attachment; filename="${orderFile.originalName}"`);
+    res.sendFile(filePath);
   } catch (err) {
     res.status(500).json({ msg: 'Server error' });
   }

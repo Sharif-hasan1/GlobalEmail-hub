@@ -20,6 +20,9 @@ export default function Orders() {
   const [emails, setEmails] = useState({}); // { orderId: [...emails] }
   const [emailLoading, setEmailLoading] = useState({});
   const [copiedId, setCopiedId] = useState('');
+  const [files, setFiles] = useState({}); // { orderId: [...files] }
+  const [filesLoading, setFilesLoading] = useState({});
+  const [downloading, setDownloading] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) { navigate('/login?redirect=/orders'); return; }
@@ -41,11 +44,44 @@ export default function Orders() {
     setEmailLoading(prev => ({ ...prev, [orderId]: false }));
   };
 
+  const loadFiles = async (orderId) => {
+    if (files[orderId]) return;
+    setFilesLoading(prev => ({ ...prev, [orderId]: true }));
+    try {
+      const res = await axios.get(`/api/orders/${orderId}/files`);
+      setFiles(prev => ({ ...prev, [orderId]: res.data }));
+    } catch {}
+    setFilesLoading(prev => ({ ...prev, [orderId]: false }));
+  };
+
+  const downloadFile = async (orderId, file) => {
+    setDownloading(file._id);
+    try {
+      const res = await axios.get(`/api/orders/${orderId}/files/${file._id}/download`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.originalName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {}
+    setDownloading('');
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  };
+
   const handleExpand = (orderId, order) => {
     const newId = expandedId === orderId ? null : orderId;
     setExpandedId(newId);
-    if (newId && order.status === 'completed' && order.emailsDelivered > 0) {
-      loadEmails(orderId);
+    if (newId && order.status === 'completed') {
+      if (order.emailsDelivered > 0) loadEmails(orderId);
+      loadFiles(orderId);
     }
   };
 
@@ -166,6 +202,37 @@ export default function Orders() {
                         ) : (
                           <p className="del-emails-empty">Loading email data...</p>
                         )}
+                      </div>
+                    )}
+
+                    {/* Delivered Files Section */}
+                    {order.status === 'completed' && files[order._id]?.length > 0 && (
+                      <div className="delivered-files-section">
+                        <div className="delivered-files-header">
+                          <h4>📁 Your Files</h4>
+                        </div>
+                        <div className="delivered-files-list">
+                          {files[order._id].map(f => (
+                            <div key={f._id} className="delivered-file-item">
+                              <div className="delivered-file-info">
+                                <span className="delivered-file-name">{f.originalName}</span>
+                                <span className="delivered-file-meta">{formatSize(f.fileSize)}</span>
+                              </div>
+                              <button
+                                className="btn btn-primary btn-sm"
+                                disabled={downloading === f._id}
+                                onClick={() => downloadFile(order._id, f)}
+                              >
+                                {downloading === f._id ? '⏳ Downloading...' : '📥 Download'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {order.status === 'completed' && filesLoading[order._id] && (
+                      <div className="delivered-files-section">
+                        <div className="del-emails-loading"><div className="spinner spinner-sm" /> Loading files...</div>
                       </div>
                     )}
 

@@ -506,6 +506,35 @@ textarea.fi { resize: vertical; }
 
 .eim-detected { padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 12px; margin-bottom: 12px; }
 .eim-detected strong { display: block; margin-bottom: 6px; color: #065f46; }
+
+/* ─── Order File Delivery Modal ─────────────────────── */
+.ofd-files-section { margin-top: 16px; }
+.ofd-files-section h4 { font-size: 14px; font-weight: 700; margin-bottom: 10px; color: var(--ap-text); }
+
+.ofd-files-list { display: flex; flex-direction: column; gap: 6px; }
+
+.ofd-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--ap-tbl-head);
+  border: 1px solid var(--ap-border);
+  border-radius: 8px;
+}
+
+.ofd-file-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.ofd-file-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ap-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ofd-file-meta { font-size: 11px; color: var(--ap-text-3); }
 .eim-col-map { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .eim-col-map span { color: #047857; }
 .eim-col-map code { background: #d1fae5; padding: 2px 6px; border-radius: 4px; font-weight: 700; }

@@ -301,6 +301,126 @@ function EmailImportModal({ order, onClose, onDone }) {
   );
 }
 
+/* ═════════════════ Order File Upload Modal ═════════ */
+function FileUploadModal({ order, onClose, onDone }) {
+  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    setLoading(true);
+    axios.get(`/api/admin/orders/${order._id}/files`)
+      .then(r => setFiles(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [order._id]);
+
+  const handleFile = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const ext = f.name.split('.').pop().toLowerCase();
+    if (!['xlsx', 'xls', 'csv', 'txt'].includes(ext)) { setError('Only .xlsx, .xls, .csv, .txt files allowed'); return; }
+    if (f.size > 10 * 1024 * 1024) { setError('File size must be under 10MB'); return; }
+    setFile(f);
+    setError('');
+  };
+
+  const doUpload = async () => {
+    if (!file) return;
+    setUploading(true); setError(''); setSuccess('');
+    const data = new FormData();
+    data.append('file', file);
+    try {
+      const r = await axios.post(`/api/admin/orders/${order._id}/upload-file`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setSuccess(`File uploaded! Order marked as completed.`);
+      setFiles(prev => [r.data.file, ...prev]);
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = '';
+      onDone();
+    } catch (err) {
+      setError(err.response?.data?.msg || 'Upload failed');
+    } finally { setUploading(false); }
+  };
+
+  const deleteFile = async (fileId) => {
+    if (!window.confirm('Delete this file?')) return;
+    try {
+      await axios.delete(`/api/admin/orders/files/${fileId}`);
+      setFiles(prev => prev.filter(f => f._id !== fileId));
+    } catch { setError('Delete failed'); }
+  };
+
+  const fmtSize = (bytes) => bytes < 1024 ? bytes + ' B' : bytes < 1048576 ? (bytes / 1024).toFixed(1) + ' KB' : (bytes / 1048576).toFixed(1) + ' MB';
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box modal-lg">
+        <div className="modal-hdr">
+          <h3>📁 Upload File — Order {short(order._id)}</h3>
+          <button className="modal-x" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="eim-order-bar">
+          <div><span className="eim-label">Customer</span><strong>{order.user?.username || 'N/A'}</strong></div>
+          <div><span className="eim-label">Product</span><strong>{order.items.map(i => i.title).join(', ')}</strong></div>
+          <div><span className="eim-label">Qty</span><strong>{order.items.reduce((s, i) => s + i.quantity, 0)}</strong></div>
+          <div><span className="eim-label">Status</span><Badge s={order.status} /></div>
+        </div>
+
+        <div className="modal-body">
+          {error && <div className="alert alert-err">{error}<button className="alert-close" onClick={() => setError('')}>✕</button></div>}
+          {success && <div className="alert alert-ok">{success}<button className="alert-close" onClick={() => setSuccess('')}>✕</button></div>}
+
+          <div className="eim-upload">
+            <div className="eim-drop" onClick={() => fileRef.current?.click()}>
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden-input" onChange={handleFile} />
+              <div className="eim-drop-icon">📁</div>
+              {file ? (
+                <div className="eim-file-name">✅ {file.name} <small>({fmtSize(file.size)})</small></div>
+              ) : (
+                <>
+                  <p className="eim-drop-text">Click to select file</p>
+                  <p className="eim-drop-hint">Accepts .xlsx, .xls, .csv, .txt — Max 10MB</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {files.length > 0 && (
+            <div className="ofd-files-section">
+              <strong>📎 Uploaded Files ({files.length})</strong>
+              <div className="ofd-files-list">
+                {files.map(f => (
+                  <div key={f._id} className="ofd-file-item">
+                    <div className="ofd-file-info">
+                      <span className="ofd-file-name">{f.originalName}</span>
+                      <span className="ofd-file-meta">{fmtSize(f.fileSize)} · {new Date(f.createdAt).toLocaleDateString()} · {f.downloads||0} downloads</span>
+                    </div>
+                    <button className="btn btn-danger btn-xs" onClick={() => deleteFile(f._id)}>🗑️</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {loading && <div className="ap-loading"><div className="spinner spinner-sm" /></div>}
+        </div>
+
+        <div className="modal-ft">
+          <button className="btn btn-ghost" onClick={onClose}>Close</button>
+          <button className="btn btn-primary" disabled={!file || uploading} onClick={doUpload}>
+            {uploading ? <><span className="spinner spinner-sm" /> Uploading…</> : '📤 Upload File'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ═════════════════ Delivered Emails Viewer ═════════ */
 function ViewEmailsModal({ order, onClose }) {
   const [emails, setEmails] = useState([]);
@@ -465,6 +585,7 @@ export default function AdminPanel(){
   const orderImportRef = useRef();
   const [orderImportResult, setOrderImportResult] = useState(null);
   const [emailImportOrder, setEmailImportOrder] = useState(null); // order object for per-order email import
+  const [fileUploadOrder, setFileUploadOrder] = useState(null); // order object for file upload
   const [viewEmailsOrder, setViewEmailsOrder] = useState(null); // order object for viewing delivered emails
 
   // Auth guard
@@ -745,7 +866,10 @@ export default function AdminPanel(){
                           <div className="act-btns">
                             {o.emailsDelivered>0&&<button className="btn btn-secondary btn-xs" onClick={()=>setViewEmailsOrder(o)}>📧 {o.emailsDelivered}</button>}
                             {user.role==='admin'&&o.status!=='cancelled'&&(
-                              <button className="btn btn-primary btn-xs" onClick={()=>setEmailImportOrder(o)}>📥 Import</button>
+                              <>
+                                <button className="btn btn-primary btn-xs" onClick={()=>setEmailImportOrder(o)}>📥 Import</button>
+                                <button className="btn btn-secondary btn-xs" onClick={()=>setFileUploadOrder(o)}>📁 File</button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -948,6 +1072,7 @@ export default function AdminPanel(){
       {couponModal!==null&&<CouponModal initial={couponModal._id?couponModal:null} onSave={()=>{setCouponModal(null);fetchCoupons();}} onClose={()=>setCouponModal(null)}/>}
       {userDetail&&<UserDetailModal userId={userDetail} onClose={()=>setUserDetail(null)} onRefresh={fetchUsers}/>}
       {emailImportOrder&&<EmailImportModal order={emailImportOrder} onClose={()=>setEmailImportOrder(null)} onDone={()=>{fetchOrders();fetchStats();}}/>}
+      {fileUploadOrder&&<FileUploadModal order={fileUploadOrder} onClose={()=>setFileUploadOrder(null)} onDone={()=>{fetchOrders();fetchStats();}}/>}
       {viewEmailsOrder&&<ViewEmailsModal order={viewEmailsOrder} onClose={()=>setViewEmailsOrder(null)}/>}
     </div>
   );
