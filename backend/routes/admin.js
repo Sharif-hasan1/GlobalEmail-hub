@@ -51,13 +51,50 @@ const bulkUpload = multer({
 
 const excelUpload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = /xlsx|xls/;
+    const allowed = /xlsx|xls|csv/;
     if (allowed.test(path.extname(file.originalname).toLowerCase())) cb(null, true);
-    else cb(new Error('Only Excel files (.xlsx, .xls) are allowed'));
+    else cb(new Error('Only Excel/CSV files (.xlsx, .xls, .csv) are allowed'));
   }
 });
+
+// ─── Column header mapping helpers ─────────────────────
+const EMAIL_ALIASES = ['email', 'e-mail', 'user name', 'username', 'login', 'mail', 'user email', 'account', 'account email'];
+const PASSWORD_ALIASES = ['password', 'pass', 'app password', 'pwd', 'passwd'];
+const RECOVERY_ALIASES = ['recovery', 'recovery mail', 'recovery email', 'backup', 'backup email', 'recovery address'];
+const SECURITY_ALIASES = ['security key', 'security', '2fa', '2fa key', 'backup code', 'backup codes'];
+
+function findColumn(headers, aliases) {
+  for (const h of headers) {
+    const lower = h.toLowerCase().trim();
+    if (aliases.includes(lower)) return h;
+  }
+  return null;
+}
+
+function mapRow(row, headers) {
+  const emailCol = findColumn(headers, EMAIL_ALIASES);
+  const passCol = findColumn(headers, PASSWORD_ALIASES);
+  const recoveryCol = findColumn(headers, RECOVERY_ALIASES);
+  const securityCol = findColumn(headers, SECURITY_ALIASES);
+
+  return {
+    email: emailCol ? (row[emailCol] || '').toString().trim() : '',
+    password: passCol ? (row[passCol] || '').toString().trim() : '',
+    recovery: recoveryCol ? (row[recoveryCol] || '').toString().trim() : '',
+    security: securityCol ? (row[securityCol] || '').toString().trim() : '',
+    _cols: { emailCol, passCol, recoveryCol, securityCol }
+  };
+}
+
+function parseExcelFile(filePath) {
+  const workbook = XLSX.readFile(filePath, { type: 'file', codepage: 65001 });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+  return { rows, headers };
+}
 
 // ═══════════════════════════════════════════════════════
 //  DASHBOARD / STATS
@@ -283,11 +320,11 @@ router.put('/orders/:id', auth, adminCheck, async (req, res) => {
 router.get('/orders/email-template', auth, requireRole('admin'), (req, res) => {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([
-    ['Email', 'Password', 'Recovery Email'],
-    ['example1@gmail.com', 'pass123', 'recovery1@gmail.com'],
-    ['example2@gmail.com', 'pass456', '']
+    ['Email', 'Password', 'Recovery Email', 'Security Key'],
+    ['example1@gmail.com', 'pass123', 'recovery1@gmail.com', 'ABCD-EFGH-1234'],
+    ['example2@gmail.com', 'pass456', '', '']
   ]);
-  ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 30 }];
+  ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Emails');
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -303,12 +340,25 @@ router.post('/orders/:id/preview-emails', auth, requireRole('admin'), excelUploa
     const order = await Order.findById(req.params.id);
     if (!order) { fs.unlinkSync(req.file.path); return res.status(404).json({ msg: 'Order not found' }); }
 
-    const workbook = XLSX.readFile(req.file.path);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet);
+    const { rows, headers } = parseExcelFile(req.file.path);
     fs.unlinkSync(req.file.path);
 
-    if (rows.length === 0) return res.status(400).json({ msg: 'Excel file is empty' });
+    if (rows.length === 0) return res.status(400).json({ msg: 'Excel file is empty — no data rows found' });
+
+    // Detect columns
+    const emailCol = findColumn(headers, EMAIL_ALIASES);
+    const passCol = findColumn(headers, PASSWORD_ALIASES);
+
+    if (!emailCol) {
+      return res.status(400).json({
+        msg: `Could not find an email column. Detected headers: [${headers.join(', ')}]. Accepted email column names: ${EMAIL_ALIASES.join(', ')}`
+      });
+    }
+    if (!passCol) {
+      return res.status(400).json({
+        msg: `Could not find a password column. Detected headers: [${headers.join(', ')}]. Accepted password column names: ${PASSWORD_ALIASES.join(', ')}`
+      });
+    }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const preview = [];
@@ -320,28 +370,34 @@ router.post('/orders/:id/preview-emails', auth, requireRole('admin'), excelUploa
     const existingSet = new Set(existing.map(e => e.email.toLowerCase()));
 
     for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
+      const mapped = mapRow(rows[i], headers);
       const rowNum = i + 2;
-      const email = (row.Email || row.email || row.EMAIL || '').toString().trim();
-      const password = (row.Password || row.password || row.PASSWORD || '').toString().trim();
-      const recovery = (row['Recovery Email'] || row.recovery || row.Recovery || row.RECOVERY || '').toString().trim();
 
-      if (!email) { errors.push(`Row ${rowNum}: missing email`); continue; }
-      if (!emailRegex.test(email)) { errors.push(`Row ${rowNum}: invalid email format "${email}"`); continue; }
-      if (!password) { errors.push(`Row ${rowNum}: missing password for "${email}"`); continue; }
-      if (seenEmails.has(email.toLowerCase())) { errors.push(`Row ${rowNum}: duplicate email "${email}"`); continue; }
-      if (existingSet.has(email.toLowerCase())) { errors.push(`Row ${rowNum}: email "${email}" already delivered for this order`); continue; }
+      // Skip completely empty rows
+      if (!mapped.email && !mapped.password) continue;
 
-      seenEmails.add(email.toLowerCase());
-      preview.push({ email, password, recovery, row: rowNum });
+      if (!mapped.email) { errors.push(`Row ${rowNum}: Email not found in column "${emailCol}". Please check the data.`); continue; }
+      if (!emailRegex.test(mapped.email)) { errors.push(`Row ${rowNum}: invalid email format "${mapped.email}"`); continue; }
+      if (!mapped.password) { errors.push(`Row ${rowNum}: missing password for "${mapped.email}"`); continue; }
+      if (seenEmails.has(mapped.email.toLowerCase())) { errors.push(`Row ${rowNum}: duplicate email "${mapped.email}"`); continue; }
+      if (existingSet.has(mapped.email.toLowerCase())) { errors.push(`Row ${rowNum}: email "${mapped.email}" already delivered for this order`); continue; }
+
+      seenEmails.add(mapped.email.toLowerCase());
+      preview.push({ email: mapped.email, password: mapped.password, recovery: mapped.recovery, security: mapped.security, row: rowNum });
     }
 
     // Calculate total needed emails from order items quantity
     const totalNeeded = order.items.reduce((sum, item) => sum + item.quantity, 0);
 
-    res.json({ preview, errors, totalNeeded, alreadyDelivered: existing.length, orderId: order._id });
+    res.json({
+      preview, errors, totalNeeded,
+      alreadyDelivered: existing.length,
+      orderId: order._id,
+      detectedColumns: { email: emailCol, password: passCol, recovery: findColumn(headers, RECOVERY_ALIASES), security: findColumn(headers, SECURITY_ALIASES) }
+    });
   } catch (err) {
     console.error(err);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ msg: 'Preview failed' });
   }
 });
@@ -354,12 +410,16 @@ router.post('/orders/:id/import-emails', auth, requireRole('admin'), excelUpload
     const order = await Order.findById(req.params.id).populate('user', 'username email');
     if (!order) { fs.unlinkSync(req.file.path); return res.status(404).json({ msg: 'Order not found' }); }
 
-    const workbook = XLSX.readFile(req.file.path);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet);
+    const { rows, headers } = parseExcelFile(req.file.path);
     fs.unlinkSync(req.file.path);
 
-    if (rows.length === 0) return res.status(400).json({ msg: 'Excel file is empty' });
+    if (rows.length === 0) return res.status(400).json({ msg: 'Excel file is empty — no data rows found' });
+
+    const emailCol = findColumn(headers, EMAIL_ALIASES);
+    const passCol = findColumn(headers, PASSWORD_ALIASES);
+
+    if (!emailCol) return res.status(400).json({ msg: `Could not find an email column. Detected headers: [${headers.join(', ')}]` });
+    if (!passCol) return res.status(400).json({ msg: `Could not find a password column. Detected headers: [${headers.join(', ')}]` });
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const errors = [];
@@ -371,20 +431,20 @@ router.post('/orders/:id/import-emails', auth, requireRole('admin'), excelUpload
     const existingSet = new Set(existing.map(e => e.email.toLowerCase()));
 
     for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
+      const mapped = mapRow(rows[i], headers);
       const rowNum = i + 2;
-      const email = (row.Email || row.email || row.EMAIL || '').toString().trim();
-      const password = (row.Password || row.password || row.PASSWORD || '').toString().trim();
-      const recovery = (row['Recovery Email'] || row.recovery || row.Recovery || row.RECOVERY || '').toString().trim();
 
-      if (!email) { errors.push(`Row ${rowNum}: missing email`); continue; }
-      if (!emailRegex.test(email)) { errors.push(`Row ${rowNum}: invalid email format "${email}"`); continue; }
-      if (!password) { errors.push(`Row ${rowNum}: missing password for "${email}"`); continue; }
-      if (seenEmails.has(email.toLowerCase())) { errors.push(`Row ${rowNum}: duplicate email "${email}"`); continue; }
-      if (existingSet.has(email.toLowerCase())) { errors.push(`Row ${rowNum}: email "${email}" already delivered`); continue; }
+      // Skip completely empty rows
+      if (!mapped.email && !mapped.password) continue;
 
-      seenEmails.add(email.toLowerCase());
-      toInsert.push({ order: order._id, email, password, recovery });
+      if (!mapped.email) { errors.push(`Row ${rowNum}: Email not found in column "${emailCol}". Please check the data.`); continue; }
+      if (!emailRegex.test(mapped.email)) { errors.push(`Row ${rowNum}: invalid email format "${mapped.email}"`); continue; }
+      if (!mapped.password) { errors.push(`Row ${rowNum}: missing password for "${mapped.email}"`); continue; }
+      if (seenEmails.has(mapped.email.toLowerCase())) { errors.push(`Row ${rowNum}: duplicate email "${mapped.email}"`); continue; }
+      if (existingSet.has(mapped.email.toLowerCase())) { errors.push(`Row ${rowNum}: email "${mapped.email}" already delivered`); continue; }
+
+      seenEmails.add(mapped.email.toLowerCase());
+      toInsert.push({ order: order._id, email: mapped.email, password: mapped.password, recovery: mapped.recovery });
     }
 
     if (toInsert.length === 0) {
@@ -411,6 +471,7 @@ router.post('/orders/:id/import-emails', auth, requireRole('admin'), excelUpload
     });
   } catch (err) {
     console.error(err);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ msg: 'Email import failed' });
   }
 });

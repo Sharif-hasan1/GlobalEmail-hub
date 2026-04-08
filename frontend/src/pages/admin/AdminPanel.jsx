@@ -201,21 +201,34 @@ function EmailImportModal({ order, onClose, onDone }) {
                 <button className="btn btn-ghost btn-sm" onClick={downloadTemplate}>📥 Download Sample Template</button>
               </div>
               <div className="eim-format-info">
-                <strong>Expected columns:</strong>
+                <strong>Accepted column headers:</strong>
                 <table className="tbl tbl-compact eim-format-tbl">
-                  <thead><tr><th>Column</th><th>Required</th><th>Example</th></tr></thead>
+                  <thead><tr><th>Field</th><th>Required</th><th>Accepted Column Names</th></tr></thead>
                   <tbody>
-                    <tr><td>Email</td><td>✅ Yes</td><td>user@gmail.com</td></tr>
-                    <tr><td>Password</td><td>✅ Yes</td><td>mypass123</td></tr>
-                    <tr><td>Recovery Email</td><td>Optional</td><td>backup@gmail.com</td></tr>
+                    <tr><td>Email</td><td>✅ Yes</td><td>Email, User Name, Username, Login, Mail</td></tr>
+                    <tr><td>Password</td><td>✅ Yes</td><td>Password, Pass, App Password</td></tr>
+                    <tr><td>Recovery</td><td>Optional</td><td>Recovery, Recovery Mail, Recovery Email</td></tr>
+                    <tr><td>Security</td><td>Optional</td><td>Security Key, Security, App Password</td></tr>
                   </tbody>
                 </table>
+                <p className="eim-format-note">Supports .xlsx, .xls, .csv — Max 5MB — UTF-8 encoding</p>
               </div>
             </div>
           )}
 
           {step === 'preview' && preview && (
             <div className="eim-preview">
+              {preview.detectedColumns && (
+                <div className="eim-detected">
+                  <strong>🔍 Detected column mapping:</strong>
+                  <div className="eim-col-map">
+                    <span>Email ← <code>{preview.detectedColumns.email || '—'}</code></span>
+                    <span>Password ← <code>{preview.detectedColumns.password || '—'}</code></span>
+                    <span>Recovery ← <code>{preview.detectedColumns.recovery || '—'}</code></span>
+                    <span>Security ← <code>{preview.detectedColumns.security || '—'}</code></span>
+                  </div>
+                </div>
+              )}
               <div className="eim-preview-stats">
                 <div className="eim-stat eim-stat-ok"><span>{preview.preview.length}</span> valid emails</div>
                 <div className="eim-stat eim-stat-err"><span>{preview.errors.length}</span> errors</div>
@@ -231,13 +244,14 @@ function EmailImportModal({ order, onClose, onDone }) {
               {preview.preview.length > 0 && (
                 <div className="table-wrap">
                   <table className="tbl tbl-compact">
-                    <thead><tr><th>#</th><th>Email</th><th>Password</th><th>Recovery</th></tr></thead>
+                    <thead><tr><th>#</th><th>Email</th><th>Password</th><th>Recovery</th><th>Security</th></tr></thead>
                     <tbody>{preview.preview.map((p, i) => (
                       <tr key={i}>
                         <td className="center">{i + 1}</td>
                         <td>{p.email}</td>
                         <td className="mono">{p.password}</td>
                         <td>{p.recovery || '—'}</td>
+                        <td>{p.security || '—'}</td>
                       </tr>
                     ))}</tbody>
                   </table>

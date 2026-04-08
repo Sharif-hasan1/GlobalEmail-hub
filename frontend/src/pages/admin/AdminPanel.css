@@ -504,6 +504,17 @@ textarea.fi { resize: vertical; }
 .ap-dark .eim-errors strong { color: #fbbf24; }
 .ap-dark .eim-errors ul { color: #fcd34d; }
 
+.eim-detected { padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 12px; margin-bottom: 12px; }
+.eim-detected strong { display: block; margin-bottom: 6px; color: #065f46; }
+.eim-col-map { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.eim-col-map span { color: #047857; }
+.eim-col-map code { background: #d1fae5; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+.eim-format-note { font-size: 11px; color: var(--ap-text-2); margin-top: 8px; }
+.ap-dark .eim-detected { background: #052e16; border-color: #065f46; }
+.ap-dark .eim-detected strong { color: #6ee7b7; }
+.ap-dark .eim-col-map span { color: #6ee7b7; }
+.ap-dark .eim-col-map code { background: #065f46; color: #d1fae5; }
+
 /* ─── Reports ───────────────────────────────────────── */
 .reports-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .full-span { grid-column: 1/-1; }
