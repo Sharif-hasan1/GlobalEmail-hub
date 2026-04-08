@@ -79,8 +79,8 @@ export default function Orders() {
   const handleExpand = (orderId, order) => {
     const newId = expandedId === orderId ? null : orderId;
     setExpandedId(newId);
-    if (newId && order.status === 'completed') {
-      if (order.emailsDelivered > 0) loadEmails(orderId);
+    if (newId) {
+      if (order.status === 'completed' && order.emailsDelivered > 0) loadEmails(orderId);
       loadFiles(orderId);
     }
   };
@@ -168,6 +168,37 @@ export default function Orders() {
                       </tfoot>
                     </table>
 
+                    {/* Delivered Files Section */}
+                    {filesLoading[order._id] && (
+                      <div className="delivered-files-section">
+                        <div className="del-emails-loading"><div className="spinner spinner-sm" /> Loading files...</div>
+                      </div>
+                    )}
+                    {files[order._id]?.length > 0 && (
+                      <div className="delivered-files-section">
+                        <div className="delivered-files-header">
+                          <h4>📁 Your Files</h4>
+                        </div>
+                        <div className="delivered-files-list">
+                          {files[order._id].map(f => (
+                            <div key={f._id} className="delivered-file-item">
+                              <div className="delivered-file-info">
+                                <span className="delivered-file-name">{f.originalName}</span>
+                                <span className="delivered-file-meta">{formatSize(f.fileSize)}</span>
+                              </div>
+                              <button
+                                className="btn btn-primary btn-sm"
+                                disabled={downloading === f._id}
+                                onClick={() => downloadFile(order._id, f)}
+                              >
+                                {downloading === f._id ? '⏳ Downloading...' : '📥 Download'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Delivered Emails Section */}
                     {order.status === 'completed' && order.emailsDelivered > 0 && (
                       <div className="delivered-emails-section">
@@ -202,37 +233,6 @@ export default function Orders() {
                         ) : (
                           <p className="del-emails-empty">Loading email data...</p>
                         )}
-                      </div>
-                    )}
-
-                    {/* Delivered Files Section */}
-                    {order.status === 'completed' && files[order._id]?.length > 0 && (
-                      <div className="delivered-files-section">
-                        <div className="delivered-files-header">
-                          <h4>📁 Your Files</h4>
-                        </div>
-                        <div className="delivered-files-list">
-                          {files[order._id].map(f => (
-                            <div key={f._id} className="delivered-file-item">
-                              <div className="delivered-file-info">
-                                <span className="delivered-file-name">{f.originalName}</span>
-                                <span className="delivered-file-meta">{formatSize(f.fileSize)}</span>
-                              </div>
-                              <button
-                                className="btn btn-primary btn-sm"
-                                disabled={downloading === f._id}
-                                onClick={() => downloadFile(order._id, f)}
-                              >
-                                {downloading === f._id ? '⏳ Downloading...' : '📥 Download'}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {order.status === 'completed' && filesLoading[order._id] && (
-                      <div className="delivered-files-section">
-                        <div className="del-emails-loading"><div className="spinner spinner-sm" /> Loading files...</div>
                       </div>
                     )}
 
