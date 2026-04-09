@@ -48,8 +48,26 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const githubLogin = async (code) => {
+    const res = await axios.post('/api/auth/github', { code });
+    const { token, user: u } = res.data;
+    localStorage.setItem('token', token);
+    axios.defaults.headers.common['x-auth-token'] = token;
+    setUser(u);
+    return u;
+  };
+
+  const googleLogin = async (credential) => {
+    const res = await axios.post('/api/auth/google', { credential });
+    const { token, user: u } = res.data;
+    localStorage.setItem('token', token);
+    axios.defaults.headers.common['x-auth-token'] = token;
+    setUser(u);
+    return u;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, githubLogin, googleLogin }}>
       {children}
     </AuthContext.Provider>
   );

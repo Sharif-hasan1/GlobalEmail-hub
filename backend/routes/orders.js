@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
+const XLSX = require('xlsx');
 const auth = require('../middleware/auth');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
@@ -92,8 +93,57 @@ router.get('/:id/emails', auth, async (req, res) => {
   try {
     const order = await Order.findOne({ _id: req.params.id, user: req.user.id });
     if (!order) return res.status(404).json({ msg: 'Order not found' });
-    const emails = await DeliveredEmail.find({ order: order._id }).select('email password recovery').sort({ createdAt: 1 });
+    const emails = await DeliveredEmail.find({ order: order._id }).select('email password recovery appPassword security').sort({ createdAt: 1 });
     res.json(emails);
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// @route GET /api/orders/:id/download-csv — user downloads credentials as CSV
+router.get('/:id/download-csv', auth, async (req, res) => {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, user: req.user.id });
+    if (!order) return res.status(404).json({ msg: 'Order not found' });
+    const emails = await DeliveredEmail.find({ order: order._id }).select('email password recovery appPassword security').sort({ createdAt: 1 });
+    if (emails.length === 0) return res.status(404).json({ msg: 'No credentials available' });
+
+    const header = 'Username,Password,Recovery Mail,App Password,Security Key';
+    const rows = emails.map(e =>
+      `"${e.email}","${e.password}","${e.recovery || ''}","${e.appPassword || ''}","${e.security || ''}"`
+    );
+    const csv = '\uFEFF' + [header, ...rows].join('\n');
+    const orderId = order._id.toString().slice(-8).toUpperCase();
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=order-${orderId}-credentials.csv`);
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// @route GET /api/orders/:id/download-xlsx — user downloads credentials as Excel
+router.get('/:id/download-xlsx', auth, async (req, res) => {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, user: req.user.id });
+    if (!order) return res.status(404).json({ msg: 'Order not found' });
+    const emails = await DeliveredEmail.find({ order: order._id }).select('email password recovery appPassword security').sort({ createdAt: 1 });
+    if (emails.length === 0) return res.status(404).json({ msg: 'No credentials available' });
+
+    const wb = XLSX.utils.book_new();
+    const data = [
+      ['Username', 'Password', 'Recovery Mail', 'App Password', 'Security Key'],
+      ...emails.map(e => [e.email, e.password, e.recovery || '', e.appPassword || '', e.security || ''])
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 20 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const orderId = order._id.toString().slice(-8).toUpperCase();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=order-${orderId}-credentials.xlsx`);
+    res.send(buf);
   } catch (err) {
     res.status(500).json({ msg: 'Server error' });
   }

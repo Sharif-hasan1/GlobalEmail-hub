@@ -205,10 +205,11 @@ function EmailImportModal({ order, onClose, onDone }) {
                 <table className="tbl tbl-compact eim-format-tbl">
                   <thead><tr><th>Field</th><th>Required</th><th>Accepted Column Names</th></tr></thead>
                   <tbody>
-                    <tr><td>Email</td><td>✅ Yes</td><td>Email, User Name, Username, Login, Mail</td></tr>
-                    <tr><td>Password</td><td>✅ Yes</td><td>Password, Pass, App Password</td></tr>
-                    <tr><td>Recovery</td><td>Optional</td><td>Recovery, Recovery Mail, Recovery Email</td></tr>
-                    <tr><td>Security</td><td>Optional</td><td>Security Key, Security, App Password</td></tr>
+                    <tr><td>Username</td><td>✅ Yes</td><td>Email, User Name, Username, Login, Mail</td></tr>
+                    <tr><td>Password</td><td>✅ Yes</td><td>Password, Pass, Pwd</td></tr>
+                    <tr><td>Recovery Mail</td><td>Optional</td><td>Recovery, Recovery Mail, Recovery Email, Backup</td></tr>
+                    <tr><td>App Password</td><td>Optional</td><td>App Password, App Pass</td></tr>
+                    <tr><td>Security Key</td><td>Optional</td><td>Security Key, Security, 2FA, Backup Code</td></tr>
                   </tbody>
                 </table>
                 <p className="eim-format-note">Supports .xlsx, .xls, .csv — Max 5MB — UTF-8 encoding</p>
@@ -225,6 +226,7 @@ function EmailImportModal({ order, onClose, onDone }) {
                     <span>Email ← <code>{preview.detectedColumns.email || '—'}</code></span>
                     <span>Password ← <code>{preview.detectedColumns.password || '—'}</code></span>
                     <span>Recovery ← <code>{preview.detectedColumns.recovery || '—'}</code></span>
+                    <span>App Password ← <code>{preview.detectedColumns.appPassword || '—'}</code></span>
                     <span>Security ← <code>{preview.detectedColumns.security || '—'}</code></span>
                   </div>
                 </div>
@@ -244,13 +246,14 @@ function EmailImportModal({ order, onClose, onDone }) {
               {preview.preview.length > 0 && (
                 <div className="table-wrap">
                   <table className="tbl tbl-compact">
-                    <thead><tr><th>#</th><th>Email</th><th>Password</th><th>Recovery</th><th>Security</th></tr></thead>
+                    <thead><tr><th>#</th><th>Email</th><th>Password</th><th>Recovery</th><th>App Pass</th><th>Security</th></tr></thead>
                     <tbody>{preview.preview.map((p, i) => (
                       <tr key={i}>
                         <td className="center">{i + 1}</td>
                         <td>{p.email}</td>
                         <td className="mono">{p.password}</td>
                         <td>{p.recovery || '—'}</td>
+                        <td>{p.appPassword || '—'}</td>
                         <td>{p.security || '—'}</td>
                       </tr>
                     ))}</tbody>
@@ -433,7 +436,7 @@ function ViewEmailsModal({ order, onClose }) {
   }, [order._id]);
 
   const copyAll = () => {
-    const text = emails.map(e => `${e.email}\t${e.password}\t${e.recovery || ''}`).join('\n');
+    const text = emails.map(e => `${e.email}\t${e.password}\t${e.recovery || ''}\t${e.appPassword || ''}\t${e.security || ''}`).join('\n');
     navigator.clipboard.writeText(text);
   };
 
@@ -453,13 +456,15 @@ function ViewEmailsModal({ order, onClose }) {
               </div>
               <div className="table-wrap">
                 <table className="tbl tbl-compact">
-                  <thead><tr><th>#</th><th>Email</th><th>Password</th><th>Recovery</th></tr></thead>
+                  <thead><tr><th>#</th><th>Username</th><th>Password</th><th>Recovery Mail</th><th>App Password</th><th>Security Key</th></tr></thead>
                   <tbody>{emails.map((e, i) => (
                     <tr key={e._id}>
                       <td className="center">{i + 1}</td>
                       <td>{e.email}</td>
                       <td className="mono">{e.password}</td>
                       <td>{e.recovery || '—'}</td>
+                      <td>{e.appPassword || '—'}</td>
+                      <td>{e.security || '—'}</td>
                     </tr>
                   ))}</tbody>
                 </table>
@@ -563,6 +568,7 @@ export default function AdminPanel(){
   const [users,setUsers]=useState([]);
   const [coupons,setCoupons]=useState([]);
   const [logs,setLogs]=useState([]);
+  const [importLogs,setImportLogs]=useState([]);
   const [settings,setSettings]=useState({});
   const [salesReport,setSalesReport]=useState(null);
   const [loading,setLoading]=useState(false);
@@ -606,6 +612,7 @@ export default function AdminPanel(){
   const fetchUsers=useCallback(async()=>{setLoading(true);try{const r=await axios.get('/api/admin/users');setUsers(r.data);}catch{}finally{setLoading(false);}},[]);
   const fetchCoupons=useCallback(async()=>{setLoading(true);try{const r=await axios.get('/api/admin/coupons');setCoupons(r.data);}catch{}finally{setLoading(false);}},[]);
   const fetchLogs=useCallback(async()=>{setLoading(true);try{const r=await axios.get(`/api/admin/logs?category=${logFilter}`);setLogs(r.data);}catch{}finally{setLoading(false);}},[logFilter]);
+  const fetchImportLogs=useCallback(async()=>{setLoading(true);try{const r=await axios.get('/api/admin/import-logs');setImportLogs(r.data);}catch{}finally{setLoading(false);}},[]);
   const fetchSettings=useCallback(async()=>{try{const r=await axios.get('/api/admin/settings');setSettings(r.data);}catch{}},[]);
   const fetchReports=useCallback(async()=>{setLoading(true);try{const r=await axios.get(`/api/admin/reports/sales?from=${reportRange.from}&to=${reportRange.to}`);setSalesReport(r.data);}catch{}finally{setLoading(false);}},[reportRange]);
 
@@ -617,9 +624,10 @@ export default function AdminPanel(){
     if(tab==='users') fetchUsers();
     if(tab==='coupons') fetchCoupons();
     if(tab==='logs') fetchLogs();
+    if(tab==='import-logs') fetchImportLogs();
     if(tab==='settings') fetchSettings();
     if(tab==='reports') fetchReports();
-  },[tab, fetchStats, fetchProducts, fetchOrders, fetchUsers, fetchCoupons, fetchLogs, fetchSettings, fetchReports]);
+  },[tab, fetchStats, fetchProducts, fetchOrders, fetchUsers, fetchCoupons, fetchLogs, fetchImportLogs, fetchSettings, fetchReports]);
 
   /* actions */
   const delProduct=async id=>{if(!window.confirm('Delete product?'))return;await axios.delete(`/api/admin/products/${id}`);fetchProducts();fetchStats();};
@@ -668,6 +676,7 @@ export default function AdminPanel(){
     {id:'coupons',icon:'🎟️',label:'Coupons'},
     {id:'reports',icon:'📈',label:'Reports'},
     {id:'logs',icon:'📋',label:'Activity Logs'},
+    {id:'import-logs',icon:'📥',label:'Import Logs'},
     {id:'settings',icon:'⚙️',label:'Settings'},
   ];
 
@@ -1022,6 +1031,26 @@ export default function AdminPanel(){
           )}
 
           {/* ═══ SETTINGS ═══ */}
+          {tab==='import-logs'&&(
+            <div>
+              <div className="panel-hdr"><h3>📥 Import Logs</h3><button className="btn btn-secondary" onClick={fetchImportLogs}>🔄 Refresh</button></div>
+              {loading?<div className="ap-loading"><div className="spinner"/></div>:(
+                <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Time</th><th>Admin</th><th>Order</th><th>File</th><th>Total</th><th>Imported</th><th>Errors</th></tr></thead><tbody>
+                  {importLogs.length===0?<tr><td colSpan={7} style={{textAlign:'center',padding:'2rem'}}>No import logs yet</td></tr>:
+                    importLogs.map(l=>(<tr key={l._id}>
+                      <td>{new Date(l.createdAt).toLocaleString()}</td>
+                      <td>{l.admin?.name||'—'}</td>
+                      <td>{l.order?._id?.slice(-6)||'—'}</td>
+                      <td>{l.fileName}</td>
+                      <td>{l.totalRows}</td>
+                      <td style={{color:'#22c55e'}}>{l.importedRows}</td>
+                      <td style={{color:l.errorRows?'#ef4444':'inherit'}}>{l.errorRows}{l.errors?.length>0&&<details style={{marginTop:4}}><summary>Details</summary><ul style={{fontSize:12,margin:0,paddingLeft:16}}>{l.errors.map((e,i)=><li key={i}>Row {e.row}: {e.message}</li>)}</ul></details>}</td>
+                    </tr>))}
+                </tbody></table></div>
+              )}
+            </div>
+          )}
+
           {tab==='settings'&&(
             <div className="settings-page">
               <div className="settings-grid">

@@ -17,6 +17,7 @@ const Coupon = require('../models/Coupon');
 const Settings = require('../models/Settings');
 const DeliveredEmail = require('../models/DeliveredEmail');
 const OrderFile = require('../models/OrderFile');
+const ImportLog = require('../models/ImportLog');
 
 // ─── File uploads setup ────────────────────────────────
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -84,7 +85,8 @@ const orderFileUpload = multer({
 
 // ─── Column header mapping helpers ─────────────────────
 const EMAIL_ALIASES = ['email', 'e-mail', 'user name', 'username', 'login', 'mail', 'user email', 'account', 'account email'];
-const PASSWORD_ALIASES = ['password', 'pass', 'app password', 'pwd', 'passwd'];
+const PASSWORD_ALIASES = ['password', 'pass', 'pwd', 'passwd'];
+const APP_PASSWORD_ALIASES = ['app password', 'app pass', 'apppassword', 'app pwd'];
 const RECOVERY_ALIASES = ['recovery', 'recovery mail', 'recovery email', 'backup', 'backup email', 'recovery address'];
 const SECURITY_ALIASES = ['security key', 'security', '2fa', '2fa key', 'backup code', 'backup codes'];
 
@@ -101,13 +103,15 @@ function mapRow(row, headers) {
   const passCol = findColumn(headers, PASSWORD_ALIASES);
   const recoveryCol = findColumn(headers, RECOVERY_ALIASES);
   const securityCol = findColumn(headers, SECURITY_ALIASES);
+  const appPassCol = findColumn(headers, APP_PASSWORD_ALIASES);
 
   return {
     email: emailCol ? (row[emailCol] || '').toString().trim() : '',
     password: passCol ? (row[passCol] || '').toString().trim() : '',
     recovery: recoveryCol ? (row[recoveryCol] || '').toString().trim() : '',
     security: securityCol ? (row[securityCol] || '').toString().trim() : '',
-    _cols: { emailCol, passCol, recoveryCol, securityCol }
+    appPassword: appPassCol ? (row[appPassCol] || '').toString().trim() : '',
+    _cols: { emailCol, passCol, recoveryCol, securityCol, appPassCol }
   };
 }
 
@@ -343,15 +347,15 @@ router.put('/orders/:id', auth, adminCheck, async (req, res) => {
 router.get('/orders/email-template', auth, requireRole('admin'), (req, res) => {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([
-    ['Email', 'Password', 'Recovery Email', 'Security Key'],
-    ['example1@gmail.com', 'pass123', 'recovery1@gmail.com', 'ABCD-EFGH-1234'],
-    ['example2@gmail.com', 'pass456', '', '']
+    ['Username', 'Password', 'Recovery Mail', 'App Password', 'Security Key'],
+    ['user1@gmail.com', 'pass123', 'recovery@gmail.com', 'app123', 'key123'],
+    ['user2@gmail.com', 'pass456', '', '', '']
   ]);
-  ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 20 }];
+  ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 20 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Emails');
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename=email-import-template.xlsx');
+  res.setHeader('Content-Disposition', 'attachment; filename=email_import_template.xlsx');
   res.send(buf);
 });
 
@@ -406,7 +410,7 @@ router.post('/orders/:id/preview-emails', auth, requireRole('admin'), excelUploa
       if (existingSet.has(mapped.email.toLowerCase())) { errors.push(`Row ${rowNum}: email "${mapped.email}" already delivered for this order`); continue; }
 
       seenEmails.add(mapped.email.toLowerCase());
-      preview.push({ email: mapped.email, password: mapped.password, recovery: mapped.recovery, security: mapped.security, row: rowNum });
+      preview.push({ email: mapped.email, password: mapped.password, recovery: mapped.recovery, appPassword: mapped.appPassword, security: mapped.security, row: rowNum });
     }
 
     // Calculate total needed emails from order items quantity
@@ -416,7 +420,7 @@ router.post('/orders/:id/preview-emails', auth, requireRole('admin'), excelUploa
       preview, errors, totalNeeded,
       alreadyDelivered: existing.length,
       orderId: order._id,
-      detectedColumns: { email: emailCol, password: passCol, recovery: findColumn(headers, RECOVERY_ALIASES), security: findColumn(headers, SECURITY_ALIASES) }
+      detectedColumns: { email: emailCol, password: passCol, recovery: findColumn(headers, RECOVERY_ALIASES), appPassword: findColumn(headers, APP_PASSWORD_ALIASES), security: findColumn(headers, SECURITY_ALIASES) }
     });
   } catch (err) {
     console.error(err);
@@ -467,21 +471,35 @@ router.post('/orders/:id/import-emails', auth, requireRole('admin'), excelUpload
       if (existingSet.has(mapped.email.toLowerCase())) { errors.push(`Row ${rowNum}: email "${mapped.email}" already delivered`); continue; }
 
       seenEmails.add(mapped.email.toLowerCase());
-      toInsert.push({ order: order._id, email: mapped.email, password: mapped.password, recovery: mapped.recovery });
+      toInsert.push({ order: order._id, email: mapped.email, password: mapped.password, recovery: mapped.recovery, appPassword: mapped.appPassword, security: mapped.security });
     }
 
     if (toInsert.length === 0) {
       return res.status(400).json({ msg: 'No valid emails to import', errors });
     }
 
-    // Insert emails
-    await DeliveredEmail.insertMany(toInsert);
+    // Insert emails in chunks of 500 for performance
+    const CHUNK_SIZE = 500;
+    for (let c = 0; c < toInsert.length; c += CHUNK_SIZE) {
+      await DeliveredEmail.insertMany(toInsert.slice(c, c + CHUNK_SIZE));
+    }
 
     // Update order: mark as completed, set emailsDelivered count
     const totalDelivered = existing.length + toInsert.length;
     order.emailsDelivered = totalDelivered;
     order.status = 'completed';
     await order.save();
+
+    // Log the import
+    await ImportLog.create({
+      admin: req.user.id,
+      order: order._id,
+      fileName: req.file ? req.file.originalname : 'unknown',
+      totalRows: rows.length,
+      importedRows: toInsert.length,
+      errorRows: errors.length,
+      errors: errors.slice(0, 50)
+    });
 
     await logActivity(req, `Imported ${toInsert.length} emails for order #${order._id.toString().slice(-8)} — marked completed`, 'order', order._id.toString());
 
@@ -885,6 +903,22 @@ router.get('/reports/export-csv', auth, requireRole('manager'), async (req, res)
     res.setHeader('Content-Disposition', 'attachment; filename=sales-report.csv');
     res.send(csvHeader + csvRows);
   } catch (err) { res.status(500).json({ msg: 'Export failed' }); }
+});
+
+// ═══════════════════════════════════════════════════════
+//  IMPORT LOGS
+// ═══════════════════════════════════════════════════════
+
+router.get('/import-logs', auth, adminCheck, async (req, res) => {
+  try {
+    const { limit } = req.query;
+    const logs = await ImportLog.find()
+      .populate('admin', 'username email')
+      .populate('order', '_id')
+      .sort({ createdAt: -1 })
+      .limit(Number(limit) || 100);
+    res.json(logs);
+  } catch (err) { res.status(500).json({ msg: 'Server error' }); }
 });
 
 module.exports = router;

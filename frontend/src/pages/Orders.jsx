@@ -88,10 +88,43 @@ export default function Orders() {
   const copyEmails = (orderId) => {
     const list = emails[orderId];
     if (!list) return;
-    const text = list.map(e => `${e.email}\t${e.password}\t${e.recovery || ''}`).join('\n');
+    const text = list.map(e => `${e.email}\t${e.password}\t${e.recovery || ''}\t${e.appPassword || ''}\t${e.security || ''}`).join('\n');
     navigator.clipboard.writeText(text);
     setCopiedId(orderId);
     setTimeout(() => setCopiedId(''), 2000);
+  };
+
+  const downloadCSV = (orderId) => {
+    const list = emails[orderId];
+    if (!list || !list.length) return;
+    const header = 'Username,Password,Recovery Mail,App Password,Security Key';
+    const rows = list.map(e =>
+      `"${e.email}","${e.password}","${e.recovery || ''}","${e.appPassword || ''}","${e.security || ''}"`
+    );
+    const csv = '\uFEFF' + [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `order-${orderId.slice(-8).toUpperCase()}-credentials.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadXLSX = async (orderId) => {
+    try {
+      const res = await axios.get(`/api/orders/${orderId}/download-xlsx`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `order-${orderId.slice(-8).toUpperCase()}-credentials.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {}
   };
 
   if (authLoading || loading) {
@@ -205,9 +238,17 @@ export default function Orders() {
                         <div className="delivered-emails-header">
                           <h4>📧 Your Email Credentials</h4>
                           {emails[order._id]?.length > 0 && (
-                            <button className="btn btn-secondary btn-sm" onClick={() => copyEmails(order._id)}>
-                              {copiedId === order._id ? '✅ Copied!' : '📋 Copy All'}
-                            </button>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <button className="btn btn-primary btn-sm" onClick={() => downloadCSV(order._id)}>
+                                📥 CSV
+                              </button>
+                              <button className="btn btn-primary btn-sm" onClick={() => downloadXLSX(order._id)}>
+                                📥 Excel
+                              </button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => copyEmails(order._id)}>
+                                {copiedId === order._id ? '✅ Copied!' : '📋 Copy All'}
+                              </button>
+                            </div>
                           )}
                         </div>
                         {emailLoading[order._id] ? (
@@ -216,7 +257,7 @@ export default function Orders() {
                           <div className="del-emails-table-wrap">
                             <table className="del-emails-table">
                               <thead>
-                                <tr><th>#</th><th>Email</th><th>Password</th><th>Recovery</th></tr>
+                                <tr><th>#</th><th>Username</th><th>Password</th><th>Recovery Mail</th><th>App Password</th><th>Security Key</th></tr>
                               </thead>
                               <tbody>
                                 {emails[order._id].map((e, i) => (
@@ -225,6 +266,8 @@ export default function Orders() {
                                     <td className="del-email-cell">{e.email}</td>
                                     <td className="del-pw-cell">{e.password}</td>
                                     <td>{e.recovery || '—'}</td>
+                                    <td>{e.appPassword || '—'}</td>
+                                    <td>{e.security || '—'}</td>
                                   </tr>
                                 ))}
                               </tbody>

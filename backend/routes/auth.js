@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
 const rateLimiter = require('../middleware/rateLimiter');
@@ -109,6 +110,158 @@ router.get('/me', auth, async (req, res) => {
     res.json(user);
   } catch (err) {
     res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// @route POST /api/auth/github — GitHub OAuth login
+router.post('/github', async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ msg: 'GitHub code required' });
+
+    // Exchange code for access token
+    const tokenRes = await axios.post('https://github.com/login/oauth/access_token', {
+      client_id: process.env.GITHUB_CLIENT_ID,
+      client_secret: process.env.GITHUB_CLIENT_SECRET,
+      code
+    }, { headers: { Accept: 'application/json' } });
+
+    const accessToken = tokenRes.data.access_token;
+    if (!accessToken) return res.status(400).json({ msg: 'GitHub token exchange failed' });
+
+    // Fetch GitHub user info
+    const ghUser = await axios.get('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    // Fetch primary email (may be private)
+    const ghEmails = await axios.get('https://api.github.com/user/emails', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const primaryEmail = ghEmails.data.find(e => e.primary && e.verified)?.email || ghEmails.data.find(e => e.verified)?.email;
+    if (!primaryEmail) return res.status(400).json({ msg: 'No verified email found on GitHub account' });
+
+    const githubId = String(ghUser.data.id);
+    const picture = ghUser.data.avatar_url || '';
+    const name = ghUser.data.name || ghUser.data.login;
+
+    // Check if user exists by githubId or email
+    let user = await User.findOne({ $or: [{ githubId }, { email: primaryEmail }] });
+
+    if (user) {
+      if (!user.githubId) {
+        user.githubId = githubId;
+        if (picture) user.picture = picture;
+        await user.save();
+      }
+
+      if (user.status === 'suspended') return res.status(403).json({ msg: 'Account suspended. Contact support.' });
+      if (user.status === 'banned') return res.status(403).json({ msg: 'Account has been banned.' });
+
+      user.lastLogin = new Date();
+      user.lastLoginIP = req.ip || '';
+      await user.save();
+    } else {
+      const username = (ghUser.data.login || primaryEmail.split('@')[0]).replace(/[^a-zA-Z0-9_]/g, '') + Math.floor(Math.random() * 1000);
+      user = new User({
+        username,
+        email: primaryEmail,
+        githubId,
+        picture,
+        lastLogin: new Date(),
+        lastLoginIP: req.ip || ''
+      });
+      await user.save();
+    }
+
+    const tokenPayload = { user: { id: user.id, role: user.role } };
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'mailstocksecret', { expiresIn: '7d' });
+
+    await logActivity(req, `GitHub login: ${user.username}`, 'auth');
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        picture: user.picture
+      }
+    });
+  } catch (err) {
+    console.error('GitHub auth error:', err);
+    res.status(500).json({ msg: 'GitHub authentication failed' });
+  }
+});
+
+// @route POST /api/auth/google — Google OAuth login
+router.post('/google', async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) return res.status(400).json({ msg: 'Google credential required' });
+
+    // Verify token with Google
+    const googleRes = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
+    const payload = googleRes.data;
+
+    if (!payload || !payload.email) {
+      return res.status(400).json({ msg: 'Invalid Google token' });
+    }
+
+    if (payload.aud !== process.env.GOOGLE_CLIENT_ID) {
+      return res.status(400).json({ msg: 'Token audience mismatch' });
+    }
+
+    const { sub: googleId, email, name, picture } = payload;
+
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+    if (user) {
+      if (!user.googleId) {
+        user.googleId = googleId;
+        if (picture) user.picture = picture;
+        await user.save();
+      }
+      if (user.status === 'suspended') return res.status(403).json({ msg: 'Account suspended. Contact support.' });
+      if (user.status === 'banned') return res.status(403).json({ msg: 'Account has been banned.' });
+
+      user.lastLogin = new Date();
+      user.lastLoginIP = req.ip || '';
+      await user.save();
+    } else {
+      const username = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') + Math.floor(Math.random() * 1000);
+      user = new User({
+        username,
+        email,
+        googleId,
+        picture: picture || '',
+        lastLogin: new Date(),
+        lastLoginIP: req.ip || ''
+      });
+      await user.save();
+    }
+
+    const tokenPayload = { user: { id: user.id, role: user.role } };
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'mailstocksecret', { expiresIn: '7d' });
+
+    await logActivity(req, `Google login: ${user.username}`, 'auth');
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        picture: user.picture
+      }
+    });
+  } catch (err) {
+    console.error('Google auth error:', err);
+    res.status(500).json({ msg: 'Google authentication failed' });
   }
 });
 
