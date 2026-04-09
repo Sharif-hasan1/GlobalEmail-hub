@@ -525,6 +525,23 @@ router.get('/orders/:id/emails', auth, adminCheck, async (req, res) => {
   } catch (err) { res.status(500).json({ msg: 'Server error' }); }
 });
 
+// Update a delivered email (edit fields like appPassword, security, etc.)
+router.put('/emails/:emailId', auth, requireRole('admin'), async (req, res) => {
+  try {
+    const { email, password, recovery, appPassword, security } = req.body;
+    const update = {};
+    if (email !== undefined) update.email = email;
+    if (password !== undefined) update.password = password;
+    if (recovery !== undefined) update.recovery = recovery;
+    if (appPassword !== undefined) update.appPassword = appPassword;
+    if (security !== undefined) update.security = security;
+
+    const doc = await DeliveredEmail.findByIdAndUpdate(req.params.emailId, update, { new: true });
+    if (!doc) return res.status(404).json({ msg: 'Email not found' });
+    res.json(doc);
+  } catch (err) { res.status(500).json({ msg: 'Server error' }); }
+});
+
 // ═══════════════════════════════════════════════════════
 //  ORDER FILE DELIVERY SYSTEM
 // ═══════════════════════════════════════════════════════

@@ -428,6 +428,10 @@ function FileUploadModal({ order, onClose, onDone }) {
 function ViewEmailsModal({ order, onClose }) {
   const [emails, setEmails] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editId, setEditId] = useState(null);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     axios.get(`/api/admin/orders/${order._id}/emails`)
       .then(r => setEmails(r.data))
@@ -439,6 +443,25 @@ function ViewEmailsModal({ order, onClose }) {
     const text = emails.map(e => `${e.email}\t${e.password}\t${e.recovery || ''}\t${e.appPassword || ''}\t${e.security || ''}`).join('\n');
     navigator.clipboard.writeText(text);
   };
+
+  const startEdit = (em) => {
+    setEditId(em._id);
+    setEditData({ email: em.email, password: em.password, recovery: em.recovery || '', appPassword: em.appPassword || '', security: em.security || '' });
+  };
+
+  const cancelEdit = () => { setEditId(null); setEditData({}); };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    try {
+      const r = await axios.put(`/api/admin/emails/${editId}`, editData);
+      setEmails(prev => prev.map(e => e._id === editId ? r.data : e));
+      setEditId(null); setEditData({});
+    } catch {}
+    setSaving(false);
+  };
+
+  const editCh = (field, val) => setEditData(p => ({ ...p, [field]: val }));
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -456,16 +479,29 @@ function ViewEmailsModal({ order, onClose }) {
               </div>
               <div className="table-wrap">
                 <table className="tbl tbl-compact">
-                  <thead><tr><th>#</th><th>Username</th><th>Password</th><th>Recovery Mail</th><th>App Password</th><th>Security Key</th></tr></thead>
+                  <thead><tr><th>#</th><th>Username</th><th>Password</th><th>Recovery Mail</th><th>App Password</th><th>Security Key</th><th>Actions</th></tr></thead>
                   <tbody>{emails.map((e, i) => (
-                    <tr key={e._id}>
-                      <td className="center">{i + 1}</td>
-                      <td>{e.email}</td>
-                      <td className="mono">{e.password}</td>
-                      <td>{e.recovery || '—'}</td>
-                      <td>{e.appPassword || '—'}</td>
-                      <td>{e.security || '—'}</td>
-                    </tr>
+                    editId === e._id ? (
+                      <tr key={e._id} className="edit-row">
+                        <td className="center">{i + 1}</td>
+                        <td><input className="fi fi-sm" value={editData.email} onChange={ev => editCh('email', ev.target.value)} /></td>
+                        <td><input className="fi fi-sm" value={editData.password} onChange={ev => editCh('password', ev.target.value)} /></td>
+                        <td><input className="fi fi-sm" value={editData.recovery} onChange={ev => editCh('recovery', ev.target.value)} /></td>
+                        <td><input className="fi fi-sm" value={editData.appPassword} onChange={ev => editCh('appPassword', ev.target.value)} /></td>
+                        <td><input className="fi fi-sm" value={editData.security} onChange={ev => editCh('security', ev.target.value)} /></td>
+                        <td><div className="act-btns"><button className="btn btn-primary btn-xs" disabled={saving} onClick={saveEdit}>{saving ? '…' : '✅'}</button><button className="btn btn-ghost btn-xs" onClick={cancelEdit}>✕</button></div></td>
+                      </tr>
+                    ) : (
+                      <tr key={e._id}>
+                        <td className="center">{i + 1}</td>
+                        <td>{e.email}</td>
+                        <td className="mono">{e.password}</td>
+                        <td>{e.recovery || '—'}</td>
+                        <td>{e.appPassword || '—'}</td>
+                        <td>{e.security || '—'}</td>
+                        <td><button className="btn btn-secondary btn-xs" onClick={() => startEdit(e)}>✏️ Edit</button></td>
+                      </tr>
+                    )
                   ))}</tbody>
                 </table>
               </div>
