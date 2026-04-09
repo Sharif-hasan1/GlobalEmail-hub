@@ -68,17 +68,19 @@ export default function Register() {
 
   useEffect(() => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
-    if (!clientId || !window.google?.accounts?.id) return;
-    window.google.accounts.id.initialize({
-      client_id: clientId,
-      callback: handleGoogleResponse
-    });
-    const btnEl = document.getElementById('google-register-btn');
-    if (btnEl) {
-      window.google.accounts.id.renderButton(btnEl, {
-        theme: 'outline', size: 'large', width: '100%', text: 'signup_with'
-      });
-    }
+    if (!clientId) return;
+    let attempts = 0;
+    const init = () => {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({ client_id: clientId, callback: handleGoogleResponse });
+        const btnEl = document.getElementById('google-register-btn');
+        if (btnEl) window.google.accounts.id.renderButton(btnEl, { theme: 'outline', size: 'large', width: '100%', text: 'signup_with' });
+      } else if (attempts < 20) {
+        attempts++;
+        setTimeout(init, 300);
+      }
+    };
+    init();
   }, [handleGoogleResponse]);
 
   return (
